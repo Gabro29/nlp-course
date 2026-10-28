@@ -59,7 +59,7 @@ main_dir:
 ## Experimental Analysis & Results
 
 ### 1. Semantic Analogy & Parallelogram Rule
-To assess whether the trained embeddings preserve linear semantic regularities ($\vec{v}_{\text{uomo}} - \vec{v}_{\text{donna}} \approx \vec{v}_{\text{ragazzo}} - \vec{v}_{\text{ragazza}}$), the vector space was projected into 2D using PCA, t-SNE, and UMAP across both Word2Vec and FastText representations.
+To assess whether the trained embeddings preserve linear semantic regularities (`v(uomo) - v(donna) ≈ v(ragazzo) - v(ragazza)`), the vector space was projected into 2D using PCA, t-SNE, and UMAP across both Word2Vec and FastText representations.
 
 The **PCA projection on Word2Vec embeddings** captured the geometric structure with the highest fidelity:
 
@@ -67,15 +67,15 @@ The **PCA projection on Word2Vec embeddings** captured the geometric structure w
   <img src="images/parallelogram_pca.png" alt="Semantic Parallelogram in PCA Subspace" width="550"/>
 </p>
 
-* The direction and magnitude of the gender offset vectors ($\vec{v}_{\text{uomo}} \to \vec{v}_{\text{donna}}$ and $\vec{v}_{\text{ragazzo}} \to \vec{v}_{\text{ragazza}}$) are practically identical and parallel.
+* The direction and magnitude of the gender offset vectors (`v(uomo) → v(donna)` and `v(ragazzo) → v(ragazza)`) are practically identical and parallel.
 * The grey point cloud represents the broader semantic manifold, highlighting that the analogical quadruplet forms a coherent parallelogram well within the semantic neighborhood.
 
 ---
 
 ### 2. Decision Threshold & F1-Score Optimization
-Because the WiC-ITA dataset presents intrinsic class imbalance, using a default threshold of $0.5$ leads to suboptimal F1 performance. By performing fine-grained threshold sweeps on the validation set, we identify the exact operating point that maximizes the harmonic mean of Precision and Recall:
+Because the WiC-ITA dataset presents intrinsic class imbalance, using a default threshold of `0.5` leads to suboptimal F1 performance. By performing fine-grained threshold sweeps on the validation set, we identify the exact operating point that maximizes the harmonic mean of Precision and Recall:
 
-| Word2Vec (Optimal $\tau = 0.2348$) | FastText (Optimal $\tau = 0.2448$) |
+| Word2Vec (Optimal threshold = 0.2348) | FastText (Optimal threshold = 0.2448) |
 | :---: | :---: |
 | <img src="images/f1_threshold_w2v_clean.png" alt="F1 Threshold Word2Vec" width="460"/> | <img src="images/f1_threshold_fft_clean.png" alt="F1 Threshold FastText" width="460"/> |
 
@@ -93,7 +93,7 @@ The discriminative capability of both neural architectures was validated through
 
 #### Performance Summary
 
-| Model / Approach | Representation | Optimal Threshold ($\tau$) | ROC-AUC | F1-Score |
+| Model / Approach | Representation | Optimal Threshold | ROC-AUC | F1-Score |
 | :--- | :--- | :---: | :---: | :---: |
 | **WordNet Baseline** | Jaccard Overlap on Synset Definitions | N/A | — | ~0.52 |
 | **BinaryNet + Word2Vec** | Skip-Gram (150-D) + Sentence Mean | **0.2348** | **0.6843** | **0.694** |
@@ -133,7 +133,7 @@ Inside `word2vec.py`, toggle the desired pipeline steps:
 * **`eval_baseline = True`**: Computes the symbolic baseline on `train`, `validation`, and `test` splits using WordNet synsets and Jaccard similarity.
 * **`build_embeddings = True`**: Extracts sentences, definitions, and associated lemmas to build the extended corpus, then trains Word2Vec and FastText models.
 * **`plot_subspace = True`**: Computes 2D projections (PCA, t-SNE, UMAP) and generates semantic parallelogram plots for analogical concept quadruplets.
-* **`create_datasets = True`**: Encodes sentences and lemmas into $L_2$-normalized feature vectors and saves compressed `.npz` datasets.
+* **`create_datasets = True`**: Encodes sentences and lemmas into L2-normalized feature vectors and saves compressed `.npz` datasets.
 * **`training = True`**: Trains the `BinaryNet` neural network across models (`w2v` and `ft`), plotting loss convergence, ROC curves, and optimal decision threshold calibration.
 * **`model_selection = True`**: Selects the best performing model on the test set and serializes the complete bundle (`state_dict`, threshold, and metrics) into `checkpoints/best_model_bundle.pt`.
 
