@@ -20,7 +20,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from plots_word2vec import (
+from plots_submission3 import (
     calculate_projections,
     plot_words_in_subspace,
     plot_training_loss,
@@ -431,7 +431,9 @@ def train_and_evaluate(train_dl, val_dl, y_train_current, input_dim: int,
         model.train()
         loss_epoch_train = 0.0
         for X, y in train_dl:
-            X, y = X.to(device), y.to(device)
+            X = X.to(device)
+            y = y.to(device).float().unsqueeze(1) if y.ndim == 1 else y.to(device).float()
+
             optimizer.zero_grad()
             logits = model(X)
             batch_loss = criterion(logits, y)
@@ -448,7 +450,9 @@ def train_and_evaluate(train_dl, val_dl, y_train_current, input_dim: int,
 
         with torch.no_grad():
             for X, y in val_dl:
-                X, y = X.to(device), y.to(device)
+                X = X.to(device)
+                y = y.to(device).float().unsqueeze(1) if y.ndim == 1 else y.to(device).float()
+
                 logits = model(X)
                 batch_loss = criterion(logits, y)
                 loss_epoch_val += batch_loss.item()
@@ -467,28 +471,39 @@ def train_and_evaluate(train_dl, val_dl, y_train_current, input_dim: int,
         stopper(current_auc, model, epoch)
         if stopper.early_stop:
             print(f"<- Early stopping attivato all'epoca {epoch}. Miglior AUC: {stopper.max_validation_auc:.4f} (epoca migliore: {stopper.best_epoch}) ->")
-            model.load_state_dict(stopper.best_model_weights)
             break
 
-    if not stopper.early_stop and stopper.best_model_weights is not None:
+    if stopper.best_model_weights is not None:
         model.load_state_dict(stopper.best_model_weights)
 
     best_epoch = stopper.best_epoch
 
-    # Calcolo soglia ottimale F1 su validation
-    precisions, recalls, thresholds = precision_recall_curve(y_true_net, y_prob_net)
+    model.eval()
+    y_true_best, y_prob_best = [], []
+    with torch.no_grad():
+        for X, y in val_dl:
+            X = X.to(device)
+            y = y.to(device).float().unsqueeze(1) if y.ndim == 1 else y.to(device).float()
+            logits = model(X)
+            probs = torch.sigmoid(logits)
+            y_true_best.extend(y.cpu().numpy().flatten())
+            y_prob_best.extend(probs.cpu().numpy().flatten())
+
+    precisions, recalls, thresholds = precision_recall_curve(y_true_best, y_prob_best)
     f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
+
     best_threshold_idx = np.argmax(f1_scores)
     best_threshold = thresholds[best_threshold_idx] if best_threshold_idx < len(thresholds) else 0.5
     best_f1 = f1_scores[best_threshold_idx]
-    val_auc = roc_auc_score(y_true_net, y_prob_net)
+    val_auc = roc_auc_score(y_true_best, y_prob_best)
 
     print(f"<- Miglior F1-score su validation ({model_name.upper()}): {best_f1:.4f} a soglia {best_threshold:.4f} ->")
 
     if make_plots:
         plot_training_loss(train_losses, val_losses, best_epoch, model_name=model_name)
-        plot_roc_curve(np.array(y_true_net), np.array(y_prob_net), val_auc, model_name=model_name)
-        plot_thresholds_and_f1(np.array(y_true_net), np.array(y_prob_net), best_threshold, best_f1, model_name=model_name)
+        plot_roc_curve(np.array(y_true_best), np.array(y_prob_best), val_auc, model_name=model_name)
+        plot_thresholds_and_f1(np.array(y_true_best), np.array(y_prob_best), best_threshold, best_f1,
+                               model_name=model_name)
 
     return model, best_threshold, {'train_losses': train_losses, 'val_losses': val_losses, 'val_auc': val_auc}
 
@@ -516,10 +531,7 @@ def evaluate_on_test(model: nn.Module, test_dl, device: str = None, threshold: f
     auc = roc_auc_score(y_true, y_probs)
 
     if threshold is None:
-        precisions, recalls, thresholds = precision_recall_curve(y_true, y_probs)
-        f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
-        best_idx = np.argmax(f1_scores)
-        threshold = thresholds[best_idx] if best_idx < len(thresholds) else 0.5
+        threshold = 0.5
 
     y_pred = (y_probs >= threshold).astype(float)
     f1 = f1_score(y_true, y_pred, average='binary')
@@ -609,12 +621,12 @@ if __name__ == "__main__":
     lr = 3e-4
 
 
-    eval_baseline = False
+    eval_baseline = True
     if eval_baseline:
         baseline_results = run_baseline_evaluation()
 
 
-    build_embeddings = False
+    build_embeddings = True
     if build_embeddings:
         w2v_model, fft_model, words_w2v, words_fft, vectors_w2v, vectors_ft = train_embedding_models(
             vector_size=vector_size
@@ -626,12 +638,12 @@ if __name__ == "__main__":
         run_subspace_analysis(vectors_w2v, vectors_ft, words_w2v, words_fft)
 
 
-    create_datasets = False
+    create_datasets = True
     if create_datasets:
         build_all_feature_datasets(w2v_model, fft_model, vector_size=vector_size)
 
 
-    training = False
+    training = True
     if training:
         training_results = run_training_pipeline(
             models_to_test=['w2v', 'ft'],
@@ -643,6 +655,6 @@ if __name__ == "__main__":
         )
 
 
-    model_selection = False
+    model_selection = True
     if model_selection:
         best_bundle_path = save_best_model_bundle(training_results)

@@ -14,14 +14,72 @@ This repository contains the implementation for **Assignment 03** of the **Natur
 
 ## Overview
 
-The objective of this assignment is to tackle the binary Word Sense Disambiguation task on the **WiC-ITA** dataset. Given a target lemma and a pair of Italian sentences containing that lemma, the system must determine whether the target word carries the same meaning (`label = 1`) or different meanings (`label = 0`) across the two contexts.
+The goal of this assignment is binary Word Sense Disambiguation on the **WiC-ITA** dataset. Given a target `lemma` and two sentences (`sentence1`, `sentence2`), the model predicts whether the lemma has the same meaning (`1`) or not (`0`).
 
-The project implements:
-1. **Symbolic Baseline:** A WordNet-based matching heuristic using Jaccard Similarity between sentences and synset definitions/examples (`omw-it:1.4`).
-2. **Embeddings & Subspace Geometry:** Training domain-specific Skip-Gram models (**Word2Vec** and **FastText**) on an extended lexical corpus, verifying semantic parallelogram properties via PCA, t-SNE, and UMAP projections.
-3. **Deep Learning Classifier:** An MLP neural network (**BinaryNet**) trained on concatenated lemma and sentence representation vectors, with class imbalance handling (`pos_weight`), early stopping on ROC-AUC, and threshold calibration.
+The pipeline consists of three steps:
+1. **Baseline:** A simple WordNet heuristic that matches sentences to synset definitions via Jaccard similarity.
+2. **Embeddings:** Domain-specific **Word2Vec** and **FastText** models trained on sentences, definitions, and related lemmas.
+3. **Classifier:** A lightweight neural classifier trained on sentence and lemma embeddings, with threshold tuning to handle class imbalance.
 
-> For a detailed step-by-step explanation of the implementation choices, see [NOTES.md](NOTES.md).
+> For a detailed explanation of the implementation choices, see [NOTES.md](NOTES.md).
+
+---
+
+## Experimental Analysis & Results
+
+### 1. Semantic Parallelogram (PCA)
+To check if the embeddings capture gender offsets, I verify the analogical relationship:
+`v(uomo) - v(donna) ≈ v(ragazzo) - v(ragazza)`
+*(man - woman ≈ boy - girl)*
+
+Projecting Word2Vec vectors onto 2D with PCA preserves this parallelogram clearly:
+
+<p align="center">
+  <img src="images/parallelogram_pca.png" alt="Semantic Parallelogram in PCA Subspace" width="550"/>
+</p>
+
+* The transition vectors `uomo → donna` (*man → woman*) and `ragazzo → ragazza` (*boy → girl*) have almost the exact same direction and length.
+* The grey background points show that both pairs sit naturally inside the general semantic manifold.
+
+---
+
+### 2. Threshold Calibration
+Because the dataset has class imbalance, the standard `0.5` decision cutoff is suboptimal. I sweep thresholds on validation to maximize F1:
+
+| Word2Vec (Best threshold = 0.1849) | FastText (Best threshold = 0.1914) |
+| :---: | :---: |
+| <img src="images/f1_threshold_w2v_clean.png" alt="F1 Threshold Word2Vec" width="460"/> | <img src="images/f1_threshold_fft_clean.png" alt="F1 Threshold FastText" width="460"/> |
+
+* Calibrated threshold: **0.1849** for Word2Vec (validation F1 = **0.6865**) and **0.1914** for FastText (validation F1 = **0.6889**).
+
+---
+
+### 3. Classification Results
+
+ROC curves on validation:
+
+| Word2Vec (AUC = 0.6614) | FastText (AUC = 0.6650) |
+| :---: | :---: |
+| <img src="images/auc_roc_w2v_clean.png" alt="ROC Curve Word2Vec" width="430"/> | <img src="images/auc_roc_fft_clean.png" alt="ROC Curve FastText" width="430"/> |
+
+#### Validation Set
+
+| Model | Representation | Optimal Threshold | ROC-AUC | F1-Score |
+| :--- | :--- | :---: | :---: | :---: |
+| **WordNet Baseline** | Jaccard Overlap on Synsets | N/A | — | 0.4132 |
+| **Word2Vec + MLP** | Skip-Gram (150-D) + Mean Pooling | 0.1849 | 0.6614 | 0.6865 |
+| **FastText + MLP** | Skip-Gram Subwords (150-D) + Mean Pooling | 0.1914 | 0.6650 | 0.6889 |
+
+#### Test Set
+
+| Model | Threshold | ROC-AUC | F1-Score | Precision | Recall |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **WordNet Baseline** | N/A | — | 0.4670 | 0.5196 | 0.4240 |
+| **Word2Vec + MLP** | 0.1849 | 0.5568 | 0.6090 | 0.5214 | 0.7320 |
+| **FastText + MLP** | **0.1914** | **0.5642** | **0.6686** | **0.5264** | **0.9160** |
+
+* Key takeaway: FastText subwords handle unseen test vocabulary much better, reaching **0.6686** test F1 with very high recall (**0.9160**).
+* For comparison, top EVALITA 2023 WiC-ITA systems reach ~0.73 F1 using large pre-trained language models; my simple Skip-Gram + MLP pipeline reaches **0.6686** F1 with no heavy pre-trained transformers.
 
 ---
 
@@ -48,62 +106,11 @@ main_dir:
 |    |--auc_roc_w2v_clean.png
 |    |--auc_roc_fft_clean.png
 |
-|--plots_word2vec.py
-|--word2vec.py
+|--plots_submission3.py
+|--submission3.py
 |--README.md
 |--.gitignore
 ```
-
----
-
-## Experimental Analysis & Results
-
-### 1. Semantic Analogy & Parallelogram Rule
-To assess whether the trained embeddings preserve linear semantic regularities (`v(uomo) - v(donna) ≈ v(ragazzo) - v(ragazza)`), the vector space was projected into 2D using PCA, t-SNE, and UMAP across both Word2Vec and FastText representations.
-
-The **PCA projection on Word2Vec embeddings** captured the geometric structure with the highest fidelity:
-
-<p align="center">
-  <img src="images/parallelogram_pca.png" alt="Semantic Parallelogram in PCA Subspace" width="550"/>
-</p>
-
-* The direction and magnitude of the gender offset vectors (`v(uomo) → v(donna)` and `v(ragazzo) → v(ragazza)`) are practically identical and parallel.
-* The grey point cloud represents the broader semantic manifold, highlighting that the analogical quadruplet forms a coherent parallelogram well within the semantic neighborhood.
-
----
-
-### 2. Decision Threshold & F1-Score Optimization
-Because the WiC-ITA dataset presents intrinsic class imbalance, using a default threshold of `0.5` leads to suboptimal F1 performance. By performing fine-grained threshold sweeps on the validation set, we identify the exact operating point that maximizes the harmonic mean of Precision and Recall:
-
-| Word2Vec (Optimal threshold = 0.2348) | FastText (Optimal threshold = 0.2448) |
-| :---: | :---: |
-| <img src="images/f1_threshold_w2v_clean.png" alt="F1 Threshold Word2Vec" width="460"/> | <img src="images/f1_threshold_fft_clean.png" alt="F1 Threshold FastText" width="460"/> |
-
-* Calibrating the decision boundary yields an F1-Score of approximately **~0.694** for Word2Vec and **~0.695** for FastText on the validation set, significantly outperforming an uncalibrated threshold.
-
----
-
-### 3. Classification Performance & ROC Analysis
-
-The discriminative capability of both neural architectures was validated through Receiver Operating Characteristic (ROC) curves:
-
-| Word2Vec (AUC = 0.6843) | FastText (AUC = 0.6681) |
-| :---: | :---: |
-| <img src="images/auc_roc_w2v_clean.png" alt="ROC Curve Word2Vec" width="430"/> | <img src="images/auc_roc_fft_clean.png" alt="ROC Curve FastText" width="430"/> |
-
-#### Performance Summary
-
-| Model / Approach | Representation | Optimal Threshold | ROC-AUC | F1-Score |
-| :--- | :--- | :---: | :---: | :---: |
-| **WordNet Baseline** | Jaccard Overlap on Synset Definitions | N/A | — | ~0.52 |
-| **BinaryNet + Word2Vec** | Skip-Gram (150-D) + Sentence Mean | **0.2348** | **0.6843** | **0.694** |
-| **BinaryNet + FastText** | Skip-Gram Subwords (150-D) + Sentence Mean | **0.2448** | 0.6681 | **0.695** |
-
-*Both neural models comfortably outperform the symbolic WordNet baseline, with Word2Vec achieving the highest global discriminative power (AUC = 0.6843).*
-
-#### Challenge Context
-
-The best system at the official **EVALITA 2023 WiC-ITA** evaluation campaign achieved an F1-Score of **~0.73**. Our approach — relying exclusively on lightweight Skip-Gram embeddings, a small MLP, and threshold calibration, without any pre-trained language model or fine-tuning — reaches **~0.695 F1**, placing it within ~5% of the top-ranked system. This gap is remarkably small considering the deliberate simplicity of the pipeline.
 
 ---
 
@@ -124,17 +131,17 @@ The best system at the official **EVALITA 2023 WiC-ITA** evaluation campaign ach
 
 ## User Guide
 
-The script `word2vec.py` is organized into independent modular phases controlled by boolean flags in the `if __name__ == "__main__":` block. Visualization functions are decoupled and maintained inside `plots_word2vec.py`.
+The script `submission3.py` is organized into independent modular phases controlled by boolean flags in the `if __name__ == "__main__":` block. Visualization functions are decoupled and maintained inside `plots_submission3.py`.
 
 ### Execution Flags
 
-Inside `word2vec.py`, toggle the desired pipeline steps:
+Inside `submission3.py`, toggle the desired pipeline steps:
 
 * **`eval_baseline = True`**: Computes the symbolic baseline on `train`, `validation`, and `test` splits using WordNet synsets and Jaccard similarity.
 * **`build_embeddings = True`**: Extracts sentences, definitions, and associated lemmas to build the extended corpus, then trains Word2Vec and FastText models.
 * **`plot_subspace = True`**: Computes 2D projections (PCA, t-SNE, UMAP) and generates semantic parallelogram plots for analogical concept quadruplets.
 * **`create_datasets = True`**: Encodes sentences and lemmas into L2-normalized feature vectors and saves compressed `.npz` datasets.
-* **`training = True`**: Trains the `BinaryNet` neural network across models (`w2v` and `ft`), plotting loss convergence, ROC curves, and optimal decision threshold calibration.
+* **`training = True`**: Trains the MLP neural network across models (`w2v` and `ft`), plotting loss convergence, ROC curves, and optimal decision threshold calibration.
 * **`model_selection = True`**: Selects the best performing model on the test set and serializes the complete bundle (`state_dict`, threshold, and metrics) into `checkpoints/best_model_bundle.pt`.
 
 ### Running the Pipeline
@@ -142,5 +149,5 @@ Inside `word2vec.py`, toggle the desired pipeline steps:
 Simply run the main script from your terminal:
 
 ```bash
-python word2vec.py
+python submission3.py
 ```

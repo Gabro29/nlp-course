@@ -2,6 +2,13 @@
 report_word2vec.md
 report_vision_course.md
 
+# Dataset
+DATASET/
+DATASET/*
+
+# Immagini specifiche
+images/plot_2026-10-29 11-45-23_6.png
+
 # Python
 __pycache__/
 *.py[cod]
